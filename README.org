@@ -1,0 +1,7 @@
+#+TITLE: journalist
+
+(News)Feed generator. Journalist takes variety of sources (Atom/RSS feeds, my
+saved bookmarks in org-roam, etc.), curates, transforms, and generates new feeds
+in Atom format along with a dynamic OPML file. The aim is to pass this on to
+something like FreshRSS so that I could get a less overwhelming, newspaper like,
+information dump everyday.
