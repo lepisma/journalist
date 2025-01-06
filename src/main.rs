@@ -107,8 +107,8 @@ impl ToXmlString for NewsItem {
 
 fn format_opml_string(feeds: Vec<NewsFeed>) -> String {
     "TESTING".to_string()
-
 }
+
 impl ToXmlString for NewsFeed {
     fn to_xml_string(&self) -> String {
         let template = r#"<?xml version="1.0" encoding="utf-8"?>
