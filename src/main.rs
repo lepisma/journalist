@@ -1,7 +1,11 @@
 use chrono::{DateTime, Utc};
 use clap::Parser;
-use std::{any::Any, fs::File, io::Write, path};
+use std::{fs::File, io::Write, path};
 use anyhow::Result;
+use sources::pile;
+use rand::seq::SliceRandom;
+
+mod sources;
 
 #[derive(Parser)]
 struct Cli {
@@ -27,15 +31,7 @@ trait ToNewsItem {
     fn to_newsitem(&self) -> NewsItem;
 }
 
-#[derive(Debug)]
-struct Bookmark {
-    id: String,
-    link: String,
-    title: String,
-    tags: Vec<String>,
-}
-
-impl ToNewsItem for Bookmark {
+impl ToNewsItem for pile::Bookmark {
     fn to_newsitem(&self) -> NewsItem {
         NewsItem {
             link: self.link.clone(),
@@ -45,42 +41,6 @@ impl ToNewsItem for Bookmark {
             categories: self.tags.clone(),
         }
     }
-}
-
-// fn read_pile_datetime(file_path: &path::Path) -> DateTime<Utc> {
-// }
-
-// fn read_pile_tags(file_path: &path::Path) -> Vec<String> {
-// }
-
-// Read bookmarks from my org-roam base
-//
-// Any file that's in the literature subdir and has `unsorted` (or no) tag is a
-// bookmark to consider.
-fn read_pile_bookmarks(roam_db_path: &path::Path) -> Vec<Bookmark> {
-    let connection = sqlite::open(roam_db_path).unwrap();
-    let query = r#"
-        SELECT
-            TRIM(id, '"') AS id,
-            TRIM(file, '"') AS file,
-            TRIM(title, '"') AS title,
-            CONCAT(TRIM(type, '"'), ':', TRIM(ref, '"')) AS ref
-        FROM nodes
-        INNER JOIN refs ON nodes.id = refs.node_id;"#;
-
-    let mut output: Vec<Bookmark> = Vec::new();
-    let mut statement = connection.prepare(query).unwrap();
-
-    while let Ok(sqlite::State::Row) = statement.next() {
-        output.push(Bookmark {
-            id: statement.read::<String, _>("id").unwrap(),
-            link: statement.read::<String, _>("ref").unwrap(),
-            title: statement.read::<String, _>("title").unwrap(),
-            tags: vec![],
-        });
-    }
-
-    output
 }
 
 fn format_opml_string(feeds: Vec<NewsFeed>) -> String {
@@ -119,24 +79,26 @@ fn format_newsitem(item: &NewsItem) -> String {
 
 fn main() -> Result<()> {
     let args = Cli::parse();
+    let mut rng = rand::thread_rng();
 
-    // Pile bookmarks
-    let bookmarks = read_pile_bookmarks(args.roam_db_path.as_path());
+    let mut unread_bookmarks: Vec<_> = pile::read_bookmarks(args.roam_db_path.as_path())
+        .into_iter()
+        .filter(|bm| bm.is_unread())
+        .collect();
+    unread_bookmarks.shuffle(&mut rng);
 
-    let items: Vec<NewsItem> = bookmarks.into_iter().map(|bm| bm.to_newsitem()).collect();
+    let items: Vec<NewsItem> = unread_bookmarks.into_iter().take(5).map(|bm| bm.to_newsitem()).collect();
     let feeds: Vec<NewsFeed> = vec![NewsFeed {
         title: "Bookmarks".to_string(),
         items
     }];
 
-    // Write each feed to separate file
     for feed in &feeds {
         let feed_file_path = args.output_path.join(feed.title.to_lowercase() + ".xml");
         let mut feed_file = File::create(feed_file_path)?;
         feed_file.write_all(format_newsfeed(feed).as_bytes())?;
     }
 
-    // Generate OPML
     let opml_string = format_opml_string(feeds);
     let opml_file_path = args.output_path.join("journalist.opml");
 

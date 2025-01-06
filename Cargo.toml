@@ -8,5 +8,7 @@ anyhow = "1.0.95"
 atom_syndication = "0.12.6"
 chrono = "0.4.39"
 clap = { version = "4.5.23", features = ["derive"] }
+rand = "0.8.5"
+regex = "1.11.1"
 sqlite = "0.36.1"
 uuid = { version = "1.11.0", features = ["v3", "v4"] }
