@@ -168,7 +168,6 @@ fn main() -> Result<()> {
         categories: Vec::new(),
         generator: "journalist".to_string(),
         link: "/pile-bookmarks".to_string(),
-        // NOTE: This has semantic issue
         updated: Utc::now(),
         subtitle: "Unread picks from the saved bookmarks.".to_string(),
     }];
