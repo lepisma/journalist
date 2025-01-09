@@ -1,6 +1,8 @@
 use std::{path, fs::File};
 use std::io::{self, BufRead};
+use chrono::NaiveDateTime;
 use regex::Regex;
+use anyhow::{Result, anyhow, Context};
 
 #[derive(Debug)]
 pub struct Bookmark {
@@ -8,6 +10,7 @@ pub struct Bookmark {
     pub link: String,
     pub title: String,
     pub tags: Vec<String>,
+    pub created: chrono::NaiveDateTime,
 }
 
 impl Bookmark {
@@ -38,6 +41,23 @@ fn read_tags(file_path: &path::Path) -> Vec<String> {
     Vec::new()
 }
 
+// Read datetime of creation of the file
+fn read_datetime(file_path: &path::Path) -> Result<chrono::NaiveDateTime> {
+    let file_name = file_path
+        .file_name()
+        .context("Not able to get file name")?
+        .to_str()
+        .context("Failed to convert file name to str")?;
+
+    // Files are named in the following pattern
+    // YYYYmmddHHMMSS-<stuff>.org
+    if let Some((first, _)) = file_name.to_string().split_once("-") {
+        Ok(chrono::NaiveDateTime::parse_from_str(first, "%Y%m%d%H%M%S")?)
+    } else {
+        Err(anyhow!("Error in parsing file: {}", file_name))
+    }
+}
+
 // Read bookmarks from my org-roam base
 //
 // Any file that's in the literature subdir and has `unsorted` (or no) tag is a
@@ -57,13 +77,15 @@ pub fn read_bookmarks(roam_db_path: &path::Path) -> Vec<Bookmark> {
     let mut statement = connection.prepare(query).unwrap();
 
     while let Ok(sqlite::State::Row) = statement.next() {
-        let file_path = statement.read::<String, _>("file").unwrap();
+        let file_path_str = statement.read::<String, _>("file").unwrap();
+        let file_path = path::Path::new(&file_path_str);
 
         output.push(Bookmark {
             id: statement.read::<String, _>("id").unwrap(),
             link: statement.read::<String, _>("ref").unwrap(),
             title: statement.read::<String, _>("title").unwrap(),
-            tags: read_tags(path::Path::new(&file_path)),
+            tags: read_tags(file_path),
+            created: read_datetime(file_path).unwrap_or(chrono::Local::now().naive_local()),
         });
     }
 

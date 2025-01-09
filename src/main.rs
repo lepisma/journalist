@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Local, TimeZone, Utc};
 use clap::Parser;
 use std::{fs::File, io::Write, path};
 use anyhow::Result;
@@ -54,12 +54,18 @@ trait ToXmlString {
 
 impl ToNewsItem for pile::Bookmark {
     fn to_newsitem(&self) -> NewsItem {
+        let date_time: DateTime<Local> = Local.from_local_datetime(&self.created).unwrap();
+
         NewsItem {
             id: self.id.clone(),
             link: self.link.clone(),
             title: self.title.clone(),
             summary: None,
-            updated: Utc::now(),
+            // NOTE: This is semantically wrong since created != updated. In
+            //       fact created is the time of creation of the bookmark and
+            //       not the source content. So expect this to change in later
+            //       version.
+            updated: date_time.to_utc(),
             authors: Vec::new(),
             categories: self.tags.clone(),
         }
@@ -162,6 +168,7 @@ fn main() -> Result<()> {
         categories: Vec::new(),
         generator: "journalist".to_string(),
         link: "/pile-bookmarks".to_string(),
+        // NOTE: This has semantic issue
         updated: Utc::now(),
         subtitle: "Unread picks from the saved bookmarks.".to_string(),
     }];
