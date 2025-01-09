@@ -1,6 +1,5 @@
 use std::{path, fs::File};
 use std::io::{self, BufRead};
-use chrono::NaiveDateTime;
 use regex::Regex;
 use anyhow::{Result, anyhow, Context};
 

@@ -111,10 +111,6 @@ impl ToXmlString for NewsItem {
     }
 }
 
-fn format_opml_string(feeds: Vec<NewsFeed>) -> String {
-    "TESTING".to_string()
-}
-
 impl ToXmlString for NewsFeed {
     fn to_xml_string(&self) -> String {
         let template = r#"<?xml version="1.0" encoding="utf-8"?>
@@ -177,12 +173,6 @@ fn main() -> Result<()> {
         let mut feed_file = File::create(feed_file_path)?;
         feed_file.write_all(feed.to_xml_string().as_bytes())?;
     }
-
-    let opml_string = format_opml_string(feeds);
-    let opml_file_path = args.output_path.join("journalist.opml");
-
-    let mut opml_file = File::create(opml_file_path)?;
-    opml_file.write_all(opml_string.as_bytes())?;
 
     Ok(())
 }
