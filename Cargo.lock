@@ -938,6 +938,7 @@ dependencies = [
  "clap",
  "glob",
  "ollama-rs",
+ "once_cell",
  "rand",
  "regex",
  "serde",

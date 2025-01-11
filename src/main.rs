@@ -10,7 +10,12 @@ mod sources;
 #[derive(Parser)]
 struct Cli {
     output_path: path::PathBuf,
-    roam_db_path: path::PathBuf,
+
+    #[arg(long)]
+    roam_db_path: Option<path::PathBuf>,
+
+    #[arg(long)]
+    notes_dir_path: Option<path::PathBuf>,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -145,7 +150,17 @@ fn main() -> Result<()> {
     let args = Cli::parse();
     let mut rng = rand::thread_rng();
 
-    let mut unread_bookmarks: Vec<_> = pile::read_bookmarks(args.roam_db_path.as_path())
+    let bookmarks: Vec<_>;
+
+    if let Some(db_path) = args.roam_db_path {
+        bookmarks = pile::read_bookmarks(db_path.as_path());
+    } else if let Some(dir_path) = args.notes_dir_path {
+        bookmarks = pile::read_bookmarks_from_dir(dir_path.as_path());
+    } else {
+        panic!("Need either --notes-dir-path or --roam-db-path to be set!");
+    }
+
+    let mut unread_bookmarks: Vec<_> = bookmarks
         .into_iter()
         .filter(|bm| bm.is_unread())
         .collect();
