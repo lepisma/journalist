@@ -165,26 +165,47 @@ fn main() -> Result<()> {
         .filter(|bm| bm.is_unread())
         .collect();
     unread_bookmarks.shuffle(&mut rng);
+    unread_bookmarks = unread_bookmarks.clone().into_iter().take(5).collect();
 
-    let items: Vec<NewsItem> = unread_bookmarks.into_iter().take(5).map(|bm| bm.to_newsitem()).collect();
-    let feeds: Vec<NewsFeed> = vec![NewsFeed {
-        id: "/pile-bookmarks".to_string(),
-        title: "Bookmarks".to_string(),
-        items,
-        authors: vec![NewsAuthor {
-            name: "Abhinav Tushar".to_string(),
-            email: "abhinav@lepisma.xyz".to_string(),
-            uri: "lepisma.xyz".to_string(),
-        }],
-        categories: Vec::new(),
-        generator: "journalist".to_string(),
-        link: "/pile-bookmarks".to_string(),
-        updated: Utc::now(),
-        subtitle: "Unread picks from the saved bookmarks.".to_string(),
-    }];
+    let (project_items, general_items): (Vec<_>, Vec<_>) = unread_bookmarks
+        .clone()
+        .into_iter()
+        .partition(|bm| bm.is_project());
+    let project_items: Vec<NewsItem> = project_items.into_iter().map(|bm| bm.to_newsitem()).collect();
+    let general_items: Vec<NewsItem> = general_items.into_iter().map(|bm| bm.to_newsitem()).collect();
+
+    let author: NewsAuthor = NewsAuthor {
+        name: "Abhinav Tushar".to_string(),
+        email: "abhinav@lepisma.xyz".to_string(),
+        uri: "lepisma.xyz".to_string(),
+    };
+    let feeds: Vec<NewsFeed> = vec![
+        NewsFeed {
+            id: "pile-bookmarks".to_string(),
+            title: "General Bookmarks".to_string(),
+            items: general_items,
+            authors: vec![author.clone()],
+            categories: Vec::new(),
+            generator: "journalist".to_string(),
+            link: "/pile-bookmarks".to_string(),
+            updated: Utc::now(),
+            subtitle: "Unread picks from saved bookmarks.".to_string(),
+        },
+        NewsFeed {
+            id: "pile-bookmarks-projects".to_string(),
+            title: "Unsorted Projects".to_string(),
+            items: project_items,
+            authors: vec![author.clone()],
+            categories: Vec::new(),
+            generator: "journalist".to_string(),
+            link: "/pile-bookmarks-projects".to_string(),
+            updated: Utc::now(),
+            subtitle: "Unsorted projects from saved bookmarks.".to_string(),
+        },
+    ];
 
     for feed in &feeds {
-        let feed_file_path = args.output_path.join(feed.title.to_lowercase() + ".xml");
+        let feed_file_path = args.output_path.join(feed.id.clone() + ".xml");
         let mut feed_file = File::create(feed_file_path)?;
         feed_file.write_all(feed.to_xml_string().as_bytes())?;
     }

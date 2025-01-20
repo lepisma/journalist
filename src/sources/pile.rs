@@ -10,7 +10,7 @@ static REF_REGEX: Lazy<Regex> = Lazy::new(|| { Regex::new(r"(?i)^:ROAM_REFS:\s*(
 static TAGS_REGEX: Lazy<Regex> = Lazy::new(|| { Regex::new(r"(?i)^\#\+TAGS:\s*(.*)").unwrap() });
 static TITLE_REGEX: Lazy<Regex> = Lazy::new(|| { Regex::new(r"(?i)^\#\+TITLE:\s*(.*)").unwrap() });
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Bookmark {
     pub id: String,
     pub link: String,
@@ -22,6 +22,14 @@ pub struct Bookmark {
 impl Bookmark {
     pub fn is_unread(&self) -> bool {
         self.tags.contains(&"unsorted".to_string())
+    }
+
+    pub fn is_project(&self) -> bool {
+        if self.tags.contains(&"project".to_string()) {
+            true
+        } else {
+            self.link.starts_with("https://github.com")
+        }
     }
 }
 
