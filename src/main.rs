@@ -4,6 +4,7 @@ use std::{fs::File, io::Write, path};
 use anyhow::Result;
 use sources::pile;
 use rand::seq::SliceRandom;
+use htmlescape::encode_minimal;
 
 mod sources;
 
@@ -110,7 +111,15 @@ impl ToXmlString for NewsItem {
         let mut tera = tera::Tera::default();
         tera.add_raw_template("news-item", template).unwrap();
         let mut context = tera::Context::new();
-        context.insert("item", &self);
+        context.insert("item", &NewsItem {
+            id: self.id.clone(),
+            title: encode_minimal(&self.title),
+            link: self.link.clone(),
+            updated: self.updated,
+            summary: self.summary.as_ref().map(|s| encode_minimal(s)),
+            categories: self.categories.clone(),
+            authors: self.authors.clone(),
+        });
         context.insert("authors", &self.authors.clone().into_iter().map(|a| a.to_xml_string()).collect::<Vec<_>>());
         tera.render("news-item", &context).unwrap()
     }
