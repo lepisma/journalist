@@ -76,6 +76,21 @@ impl ToNewsItem for pile::Bookmark {
     }
 }
 
+impl ToNewsItem for hf::Paper {
+    fn to_newsitem(&self) -> NewsItem {
+        NewsItem {
+            id: self.id.clone(),
+            link: self.link.clone(),
+            title: self.title.clone(),
+            summary: Some(self.description.clone()),
+            published: self.added,
+            updated: self.added,
+            authors: Vec::new(),
+            categories: self.tags.clone(),
+        }
+    }
+}
+
 impl ToXmlString for NewsAuthor {
     fn to_xml_string(&self) -> String {
         format!(r#"<author>
@@ -189,6 +204,8 @@ fn main() -> Result<()> {
     let project_items: Vec<NewsItem> = project_items.into_iter().map(|bm| bm.to_newsitem()).collect();
     let general_items: Vec<NewsItem> = general_items.into_iter().map(|bm| bm.to_newsitem()).collect();
 
+    let paper_items: Vec<NewsItem> = read_papers().into_iter().map(|p| p.to_newsitem()).collect();
+
     let feeds: Vec<NewsFeed> = vec![
         NewsFeed {
             id: "pile-bookmarks".to_string(),
@@ -212,6 +229,17 @@ fn main() -> Result<()> {
             updated: Utc::now(),
             subtitle: "Unsorted projects from saved bookmarks.".to_string(),
         },
+        NewsFeed {
+            id: "hf-papers".to_string(),
+            title: "Hugging Face Papers".to_string(),
+            items: paper_items,
+            authors: vec![author.clone()],
+            categories: Vec::new(),
+            generator: "journalist".to_string(),
+            link: "/hf-papers".to_string(),
+            updated: Utc::now(),
+            subtitle: "Top papers from Hugging Face Daily Papers".to_string()
+        }
     ];
 
     for feed in &feeds {
