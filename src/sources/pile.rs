@@ -4,6 +4,7 @@ use std::io::{self, BufRead};
 use regex::Regex;
 use anyhow::{Result, anyhow, Context};
 use once_cell::sync::Lazy;
+use chrono::{DateTime, Utc};
 
 static ID_REGEX: Lazy<Regex> = Lazy::new(|| { Regex::new(r"(?i)^:id:\s*(.*)").unwrap() });
 static REF_REGEX: Lazy<Regex> = Lazy::new(|| { Regex::new(r"(?i)^:ROAM_REFS:\s*(.*)").unwrap() });
@@ -16,7 +17,7 @@ pub struct Bookmark {
     pub link: String,
     pub title: String,
     pub tags: Vec<String>,
-    pub created: chrono::NaiveDateTime,
+    pub created: DateTime<Utc>,
 }
 
 impl Bookmark {
@@ -108,7 +109,7 @@ fn read_tags(file_path: &path::Path) -> Vec<String> {
 }
 
 // Read datetime of creation of the file using the pattern in file name
-fn read_datetime(file_path: &path::Path) -> Result<chrono::NaiveDateTime> {
+fn read_datetime(file_path: &path::Path) -> Result<DateTime<Utc>> {
     let file_name = file_path
         .file_name()
         .context("Not able to get file name")?
@@ -118,7 +119,13 @@ fn read_datetime(file_path: &path::Path) -> Result<chrono::NaiveDateTime> {
     // Files are named in the following pattern
     // YYYYmmddHHMMSS-<stuff>.org
     if let Some((first, _)) = file_name.to_string().split_once("-") {
-        Ok(chrono::NaiveDateTime::parse_from_str(first, "%Y%m%d%H%M%S")?)
+        let dt = chrono::NaiveDateTime::parse_from_str(first, "%Y%m%d%H%M%S")?;
+
+        // Most of my saves are in this timezone, but if they are not we will
+        // get wrong results. I don't have a good way of solving it right now
+        // other than adding tz information in the file name.
+        let tz = chrono_tz::Asia::Kolkata;
+        Ok(dt.and_local_timezone(tz).unwrap().to_utc())
     } else {
         Err(anyhow!("Error in parsing file: {}", file_name))
     }
@@ -136,7 +143,7 @@ pub fn read_bookmarks_from_dir(dir_path: &path::Path) -> Vec<Bookmark> {
                     if let Some(link) = ref_ {
                         output.push(Bookmark {
                             id, link, title, tags,
-                            created: read_datetime(path.as_path()).unwrap_or(chrono::Local::now().naive_local()),
+                            created: read_datetime(path.as_path()).unwrap_or(chrono::Utc::now()),
                         })
                     }
                 }
@@ -171,7 +178,7 @@ pub fn read_bookmarks(roam_db_path: &path::Path) -> Vec<Bookmark> {
             link: statement.read::<String, _>("ref").unwrap(),
             title: statement.read::<String, _>("title").unwrap(),
             tags: read_tags(file_path),
-            created: read_datetime(file_path).unwrap_or(chrono::Local::now().naive_local()),
+            created: read_datetime(file_path).unwrap_or(chrono::Utc::now()),
         });
     }
 

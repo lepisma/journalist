@@ -1,8 +1,8 @@
-use chrono::{DateTime, Local, TimeZone, Utc};
+use chrono::{DateTime, Utc};
 use clap::Parser;
 use std::{fs::File, io::Write, path};
 use anyhow::Result;
-use sources::pile;
+use sources::{hf::{self, read_papers}, pile};
 use rand::seq::SliceRandom;
 use htmlescape::encode_minimal;
 
@@ -45,6 +45,7 @@ struct NewsItem {
     link: String,
     title: String,
     summary: Option<String>,
+    published: DateTime<Utc>,
     updated: DateTime<Utc>,
     authors: Vec<NewsAuthor>,
     categories: Vec<String>,
@@ -60,18 +61,15 @@ trait ToXmlString {
 
 impl ToNewsItem for pile::Bookmark {
     fn to_newsitem(&self) -> NewsItem {
-        let date_time: DateTime<Local> = Local.from_local_datetime(&self.created).unwrap();
-
         NewsItem {
             id: self.id.clone(),
             link: self.link.clone(),
             title: self.title.clone(),
             summary: None,
-            // NOTE: This is semantically wrong since created != updated. In
-            //       fact created is the time of creation of the bookmark and
-            //       not the source content. So expect this to change in later
-            //       version.
-            updated: date_time.to_utc(),
+            // NOTE: This is semantically wrong since created (when bookmark was
+            //       saved) != published (when content was actually published).
+            published: self.created,
+            updated: self.created,
             authors: Vec::new(),
             categories: self.tags.clone(),
         }
@@ -98,6 +96,7 @@ impl ToXmlString for NewsItem {
   <link href="{{ item.link }}" />
   <id>urn:uuid:{{ item.id }}</id>
   <updated>{{ item.updated }}</updated>
+  <published>{{ item.published }}</published>
   {%- if item.summary %}
   <summary>{{ item.summary }}</summary>
   {%- endif %}
@@ -115,6 +114,7 @@ impl ToXmlString for NewsItem {
             id: self.id.clone(),
             title: encode_minimal(&self.title),
             link: self.link.clone(),
+            published: self.published,
             updated: self.updated,
             summary: self.summary.as_ref().map(|s| encode_minimal(s)),
             categories: self.categories.clone(),
@@ -159,6 +159,12 @@ fn main() -> Result<()> {
     let args = Cli::parse();
     let mut rng = rand::thread_rng();
 
+    let author: NewsAuthor = NewsAuthor {
+        name: "Abhinav Tushar".to_string(),
+        email: "abhinav@lepisma.xyz".to_string(),
+        uri: "lepisma.xyz".to_string(),
+    };
+
     let bookmarks: Vec<_>;
 
     if let Some(db_path) = args.roam_db_path {
@@ -183,11 +189,6 @@ fn main() -> Result<()> {
     let project_items: Vec<NewsItem> = project_items.into_iter().map(|bm| bm.to_newsitem()).collect();
     let general_items: Vec<NewsItem> = general_items.into_iter().map(|bm| bm.to_newsitem()).collect();
 
-    let author: NewsAuthor = NewsAuthor {
-        name: "Abhinav Tushar".to_string(),
-        email: "abhinav@lepisma.xyz".to_string(),
-        uri: "lepisma.xyz".to_string(),
-    };
     let feeds: Vec<NewsFeed> = vec![
         NewsFeed {
             id: "pile-bookmarks".to_string(),

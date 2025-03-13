@@ -7,6 +7,7 @@ edition = "2021"
 anyhow = "1.0.95"
 atom_syndication = "0.12.6"
 chrono = { version = "0.4.39", features = ["serde"] }
+chrono-tz = "0.10.1"
 clap = { version = "4.5.23", features = ["derive"] }
 glob = "0.3.2"
 htmlescape = "0.3.1"
