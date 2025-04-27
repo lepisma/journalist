@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use clap::Parser;
 use std::{fs::File, io::Write, path};
 use anyhow::Result;
-use sources::{hf::{self, read_papers}, pile};
+use sources::{hf, pile};
 use rand::seq::SliceRandom;
 use htmlescape::encode_minimal;
 
@@ -191,26 +191,27 @@ fn main() -> Result<()> {
     }
 
     let mut unread_bookmarks: Vec<_> = bookmarks
-        .into_iter()
+        .iter()
         .filter(|bm| bm.is_unread())
         .collect();
     unread_bookmarks.shuffle(&mut rng);
     unread_bookmarks = unread_bookmarks.clone().into_iter().take(5).collect();
 
+    let recommended_bookmarks: Vec<_> = bookmarks
+        .iter()
+        .filter(|bm| bm.is_recommended())
+        .collect();
+
     let (project_items, general_items): (Vec<_>, Vec<_>) = unread_bookmarks
         .clone()
         .into_iter()
         .partition(|bm| bm.is_project());
-    let project_items: Vec<NewsItem> = project_items.into_iter().map(|bm| bm.to_newsitem()).collect();
-    let general_items: Vec<NewsItem> = general_items.into_iter().map(|bm| bm.to_newsitem()).collect();
-
-    let paper_items: Vec<NewsItem> = read_papers().into_iter().map(|p| p.to_newsitem()).collect();
 
     let feeds: Vec<NewsFeed> = vec![
         NewsFeed {
             id: "pile-bookmarks".to_string(),
             title: "General Bookmarks".to_string(),
-            items: general_items,
+            items: general_items.into_iter().map(|bm| bm.to_newsitem()).collect(),
             authors: vec![author.clone()],
             categories: Vec::new(),
             generator: "journalist".to_string(),
@@ -221,7 +222,7 @@ fn main() -> Result<()> {
         NewsFeed {
             id: "pile-bookmarks-projects".to_string(),
             title: "Unsorted Projects".to_string(),
-            items: project_items,
+            items: project_items.into_iter().map(|bm| bm.to_newsitem()).collect(),
             authors: vec![author.clone()],
             categories: Vec::new(),
             generator: "journalist".to_string(),
@@ -232,13 +233,24 @@ fn main() -> Result<()> {
         NewsFeed {
             id: "hf-papers".to_string(),
             title: "Hugging Face Papers".to_string(),
-            items: paper_items,
+            items: hf::read_papers().into_iter().map(|p| p.to_newsitem()).collect(),
             authors: vec![author.clone()],
             categories: Vec::new(),
             generator: "journalist".to_string(),
             link: "/hf-papers".to_string(),
             updated: Utc::now(),
             subtitle: "Top papers from Hugging Face Daily Papers".to_string()
+        },
+        NewsFeed {
+            id: "recommended-links".to_string(),
+            title: "lepisma's recommended links".to_string(),
+            items: recommended_bookmarks.iter().map(|bm| bm.to_newsitem()).collect(),
+            authors: vec![author.clone()],
+            categories: Vec::new(),
+            generator: "journalist".to_string(),
+            link: "/recommended-links".to_string(),
+            updated: Utc::now(),
+            subtitle: "Recommendations from lepisma's list of read articles and bookmarks".to_string()
         }
     ];
 

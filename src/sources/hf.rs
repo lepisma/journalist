@@ -9,6 +9,7 @@ pub struct Paper {
     pub tags: Vec<String>,
     pub arxiv: Option<String>,
     pub added: DateTime<Utc>,
+    pub votes: usize,
 }
 
 pub fn read_papers() -> Vec<Paper> {

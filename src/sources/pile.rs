@@ -32,6 +32,10 @@ impl Bookmark {
             self.link.starts_with("https://github.com")
         }
     }
+
+    pub fn is_recommended(&self) -> bool {
+        self.tags.contains(&"recommend".to_string()) & !self.is_unread()
+    }
 }
 
 // Return id, ref, tags, and title (in that order) by reading the content of
