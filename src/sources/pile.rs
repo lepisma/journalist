@@ -1,3 +1,4 @@
+use std::env::consts;
 use std::fs;
 use std::{path, fs::File};
 use std::io::{self, BufRead};
@@ -18,6 +19,7 @@ pub struct Bookmark {
     pub title: String,
     pub tags: Vec<String>,
     pub created: DateTime<Utc>,
+    pub content: Option<String>,
 }
 
 impl Bookmark {
@@ -112,6 +114,11 @@ fn read_tags(file_path: &path::Path) -> Vec<String> {
     Vec::new()
 }
 
+fn read_content(file_path: &path::Path) -> Result<String> {
+    // Reading and returning the whole file data as of now
+    Ok(std::fs::read_to_string(file_path)?)
+}
+
 // Read datetime of creation of the file using the pattern in file name
 fn read_datetime(file_path: &path::Path) -> Result<DateTime<Utc>> {
     let file_name = file_path
@@ -148,6 +155,7 @@ pub fn read_bookmarks_from_dir(dir_path: &path::Path) -> Vec<Bookmark> {
                         output.push(Bookmark {
                             id, link, title, tags,
                             created: read_datetime(path.as_path()).unwrap_or(chrono::Utc::now()),
+                            content: read_content(path.as_path()).map_or(None, |v| Some(v)),
                         })
                     }
                 }
@@ -183,6 +191,7 @@ pub fn read_bookmarks(roam_db_path: &path::Path) -> Vec<Bookmark> {
             title: statement.read::<String, _>("title").unwrap(),
             tags: read_tags(file_path),
             created: read_datetime(file_path).unwrap_or(chrono::Utc::now()),
+            content: read_content(file_path).map_or(None, |v| Some(v)),
         });
     }
 

@@ -133,7 +133,7 @@ impl ToNewsItem for pile::Bookmark {
             id: self.id.clone(),
             link: self.link.clone(),
             title: self.title.clone(),
-            summary: None,
+            summary: self.content.clone(),
             // NOTE: This is semantically wrong since created (when bookmark was
             //       saved) != published (when content was actually published).
             published: self.created,
@@ -181,7 +181,7 @@ impl ToXmlString for NewsItem {
   <updated>{{ item.updated }}</updated>
   <published>{{ item.published }}</published>
   {%- if item.summary %}
-  <summary>{{ item.summary }}</summary>
+  <summary type="text">{{ item.summary }}</summary>
   {%- endif %}
   {%- for category in item.categories %}
   <category term="{{ category }}" />
