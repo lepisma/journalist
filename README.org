@@ -5,3 +5,15 @@ saved bookmarks in org-roam, etc.), curates, transforms, and generates new feeds
 in Atom format along with a dynamic OPML file. The aim is to pass this on to
 something like FreshRSS so that I could get a less overwhelming, newspaper like,
 information dump everyday.
+
+* Usage
+Since this is primarily a personal utility, the commands below might not make
+sense to you for now. Anyway, here they are:
+
+#+begin_src shell
+  journalist generate pile-bookmarks (--notes-dir-path=<notes-dir-path>|--roam-db-path=<roam-db-path>) <output-file>
+  journalist generate pile-bookmarks-projects (--notes-dir-path=<notes-dir-path>|--roam-db-path=<roam-db-path>) <output-file>
+  journalist generate hf-papers <output-file>
+  journalist generate recommended-links (--notes-dir-path=<notes-dir-path>|--roam-db-path=<roam-db-path>) <output-file>
+  journalist merge --input=<input>... <output-file>
+#+end_src

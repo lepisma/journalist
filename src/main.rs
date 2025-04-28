@@ -1,25 +1,63 @@
 use chrono::{DateTime, Utc};
-use clap::Parser;
-use std::{fs::File, io::Write, path};
-use anyhow::Result;
+use clap::{Parser, Subcommand};
+use log::debug;
+use std::{fs::File, io::Write, ops::Add, path};
+use anyhow::{anyhow, Result};
 use sources::{hf, pile};
 use rand::seq::SliceRandom;
 use htmlescape::encode_minimal;
 
 mod sources;
+mod utils;
 
 #[derive(Parser)]
 struct Cli {
-    output_path: path::PathBuf,
-
-    #[arg(long)]
-    roam_db_path: Option<path::PathBuf>,
-
-    #[arg(long)]
-    notes_dir_path: Option<path::PathBuf>,
+    #[command(subcommand)]
+    command: Commands,
 }
 
-#[derive(Clone, serde::Serialize)]
+#[derive(Subcommand)]
+enum Commands {
+    Generate {
+        #[command(subcommand)]
+        gen_command: GenCommands,
+    },
+    Merge {
+        #[arg(long)]
+        input: Vec<path::PathBuf>,
+        output_file: path::PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
+enum GenCommands {
+    PileBookmarks {
+        #[arg(long)]
+        roam_db_path: Option<path::PathBuf>,
+        #[arg(long)]
+        notes_dir_path: Option<path::PathBuf>,
+        output_file: path::PathBuf,
+    },
+    PileBookmarksProjects {
+        #[arg(long)]
+        roam_db_path: Option<path::PathBuf>,
+        #[arg(long)]
+        notes_dir_path: Option<path::PathBuf>,
+        output_file: path::PathBuf,
+    },
+    HfPapers {
+        output_file: path::PathBuf,
+    },
+    RecommendedLinks {
+        #[arg(long)]
+        roam_db_path: Option<path::PathBuf>,
+        #[arg(long)]
+        notes_dir_path: Option<path::PathBuf>,
+        output_file: path::PathBuf,
+    },
+}
+
+#[derive(Clone, serde::Serialize, Debug)]
 struct NewsAuthor {
     name: String,
     email: String,
@@ -39,7 +77,7 @@ struct NewsFeed {
     generator: String
 }
 
-#[derive(Clone, serde::Serialize)]
+#[derive(Clone, serde::Serialize, Debug)]
 struct NewsItem {
     id: String,
     link: String,
@@ -49,6 +87,36 @@ struct NewsItem {
     updated: DateTime<Utc>,
     authors: Vec<NewsAuthor>,
     categories: Vec<String>,
+}
+
+impl Add for NewsItem {
+    type Output = Result<Self>;
+
+    fn add(self, other: Self) -> Result<Self> {
+        if self.id != other.id {
+            Err(anyhow!("{:?} and {:?} have different IDs", self, other))
+        } else {
+            let item = NewsItem {
+                id: self.id,
+                link: self.link,
+                title: self.title,
+                summary: if self.summary.is_some() {
+                    if other.summary.is_some() {
+                        Some(format!("{}\n-----\n{}", self.summary.unwrap(), other.summary.unwrap()))
+                    } else {
+                        self.summary
+                    }
+                } else {
+                    other.summary
+                },
+                published: self.published,
+                updated: std::cmp::max(self.updated, other.updated),
+                authors: self.authors,
+                categories: utils::union_strings(self.categories, other.categories),
+            };
+            Ok(item)
+        }
+    }
 }
 
 trait ToNewsItem {
@@ -173,6 +241,7 @@ impl ToXmlString for NewsFeed {
 fn main() -> Result<()> {
     let args = Cli::parse();
     let mut rng = rand::thread_rng();
+    env_logger::init();
 
     let author: NewsAuthor = NewsAuthor {
         name: "Abhinav Tushar".to_string(),
@@ -180,84 +249,113 @@ fn main() -> Result<()> {
         uri: "lepisma.xyz".to_string(),
     };
 
-    let bookmarks: Vec<_>;
 
-    if let Some(db_path) = args.roam_db_path {
-        bookmarks = pile::read_bookmarks(db_path.as_path());
-    } else if let Some(dir_path) = args.notes_dir_path {
-        bookmarks = pile::read_bookmarks_from_dir(dir_path.as_path());
-    } else {
-        panic!("Need either --notes-dir-path or --roam-db-path to be set!");
-    }
-
-    let mut unread_bookmarks: Vec<_> = bookmarks
-        .iter()
-        .filter(|bm| bm.is_unread())
-        .collect();
-    unread_bookmarks.shuffle(&mut rng);
-    unread_bookmarks = unread_bookmarks.clone().into_iter().take(5).collect();
-
-    let recommended_bookmarks: Vec<_> = bookmarks
-        .iter()
-        .filter(|bm| bm.is_recommended())
-        .collect();
-
-    let (project_items, general_items): (Vec<_>, Vec<_>) = unread_bookmarks
-        .clone()
-        .into_iter()
-        .partition(|bm| bm.is_project());
-
-    let feeds: Vec<NewsFeed> = vec![
-        NewsFeed {
-            id: "pile-bookmarks".to_string(),
-            title: "General Bookmarks".to_string(),
-            items: general_items.into_iter().map(|bm| bm.to_newsitem()).collect(),
-            authors: vec![author.clone()],
-            categories: Vec::new(),
-            generator: "journalist".to_string(),
-            link: "/pile-bookmarks".to_string(),
-            updated: Utc::now(),
-            subtitle: "Unread picks from saved bookmarks.".to_string(),
+    match args.command {
+        Commands::Merge { input: _, output_file: _ } => {
+            return Err(anyhow!("Merge operation not implemented yet!"));
         },
-        NewsFeed {
-            id: "pile-bookmarks-projects".to_string(),
-            title: "Unsorted Projects".to_string(),
-            items: project_items.into_iter().map(|bm| bm.to_newsitem()).collect(),
-            authors: vec![author.clone()],
-            categories: Vec::new(),
-            generator: "journalist".to_string(),
-            link: "/pile-bookmarks-projects".to_string(),
-            updated: Utc::now(),
-            subtitle: "Unsorted projects from saved bookmarks.".to_string(),
-        },
-        NewsFeed {
-            id: "hf-papers".to_string(),
-            title: "Hugging Face Papers".to_string(),
-            items: hf::read_papers().into_iter().map(|p| p.to_newsitem()).collect(),
-            authors: vec![author.clone()],
-            categories: Vec::new(),
-            generator: "journalist".to_string(),
-            link: "/hf-papers".to_string(),
-            updated: Utc::now(),
-            subtitle: "Top papers from Hugging Face Daily Papers".to_string()
-        },
-        NewsFeed {
-            id: "recommended-links".to_string(),
-            title: "lepisma's recommended links".to_string(),
-            items: recommended_bookmarks.iter().map(|bm| bm.to_newsitem()).collect(),
-            authors: vec![author.clone()],
-            categories: Vec::new(),
-            generator: "journalist".to_string(),
-            link: "/recommended-links".to_string(),
-            updated: Utc::now(),
-            subtitle: "Recommendations from lepisma's list of read articles and bookmarks".to_string()
+        Commands::Generate { gen_command } => {
+            let bookmarks: Vec<_>;
+            let feed: NewsFeed;
+
+            match gen_command {
+                GenCommands::PileBookmarks { roam_db_path, notes_dir_path, output_file } => {
+                    if let Some(db_path) = roam_db_path {
+                        bookmarks = pile::read_bookmarks(db_path.as_path());
+                    } else if let Some(dir_path) = notes_dir_path {
+                        bookmarks = pile::read_bookmarks_from_dir(dir_path.as_path());
+                    } else {
+                        panic!("Need either --notes-dir-path or --roam-db-path to be set!");
+                    }
+
+                    let mut general_bookmarks: Vec<_> = bookmarks
+                        .iter()
+                        .filter(|bm| bm.is_unread())
+                        .filter(|bm| !bm.is_project())
+                        .collect();
+
+                    general_bookmarks.shuffle(&mut rng);
+
+                    feed = NewsFeed {
+                        id: "pile-bookmarks".to_string(),
+                        title: "General Bookmarks".to_string(),
+                        items: general_bookmarks.iter().map(|bm| bm.to_newsitem()).take(2).collect(),
+                        authors: vec![author.clone()],
+                        categories: Vec::new(),
+                        generator: "journalist".to_string(),
+                        link: "/pile-bookmarks".to_string(),
+                        updated: Utc::now(),
+                        subtitle: "Unread picks from saved bookmarks.".to_string(),
+                    };
+
+                    let mut feed_file = File::create(output_file)?;
+                    feed_file.write_all(feed.to_xml_string().as_bytes())?;
+                },
+                GenCommands::PileBookmarksProjects { roam_db_path, notes_dir_path, output_file } => {
+                    if let Some(db_path) = roam_db_path {
+                        bookmarks = pile::read_bookmarks(db_path.as_path());
+                    } else if let Some(dir_path) = notes_dir_path {
+                        bookmarks = pile::read_bookmarks_from_dir(dir_path.as_path());
+                    } else {
+                        panic!("Need either --notes-dir-path or --roam-db-path to be set!");
+                    }
+
+                    let mut project_bookmarks: Vec<_> = bookmarks
+                        .iter()
+                        .filter(|bm| bm.is_unread())
+                        .filter(|bm| bm.is_project())
+                        .collect();
+
+                    project_bookmarks.shuffle(&mut rng);
+
+                    feed = NewsFeed {
+                        id: "pile-bookmarks-projects".to_string(),
+                        title: "Unsorted Projects".to_string(),
+                        items: project_bookmarks.iter().map(|bm| bm.to_newsitem()).take(1).collect(),
+                        authors: vec![author.clone()],
+                        categories: Vec::new(),
+                        generator: "journalist".to_string(),
+                        link: "/pile-bookmarks-projects".to_string(),
+                        updated: Utc::now(),
+                        subtitle: "Unsorted projects from saved bookmarks.".to_string(),
+                    };
+
+                    let mut feed_file = File::create(output_file)?;
+                    feed_file.write_all(feed.to_xml_string().as_bytes())?;
+                },
+                GenCommands::HfPapers { output_file: _ } => {
+                    return Err(anyhow!("HF Papers feed generator is not ready yet!"));
+                },
+                GenCommands::RecommendedLinks { roam_db_path, notes_dir_path, output_file } => {
+                    if let Some(db_path) = roam_db_path {
+                        bookmarks = pile::read_bookmarks(db_path.as_path());
+                    } else if let Some(dir_path) = notes_dir_path {
+                        bookmarks = pile::read_bookmarks_from_dir(dir_path.as_path());
+                    } else {
+                        panic!("Need either --notes-dir-path or --roam-db-path to be set!");
+                    }
+
+                    let recommended_bookmarks: Vec<_> = bookmarks
+                        .iter()
+                        .filter(|bm| bm.is_recommended())
+                        .collect();
+                    feed = NewsFeed {
+                        id: "recommended-links".to_string(),
+                        title: "lepisma's recommended links".to_string(),
+                        items: recommended_bookmarks.iter().map(|bm| bm.to_newsitem()).collect(),
+                        authors: vec![author.clone()],
+                        categories: Vec::new(),
+                        generator: "journalist".to_string(),
+                        link: "/recommended-links".to_string(),
+                        updated: Utc::now(),
+                        subtitle: "Recommendations from lepisma's list of read articles and bookmarks".to_string()
+                    };
+
+                    let mut feed_file = File::create(output_file)?;
+                    feed_file.write_all(feed.to_xml_string().as_bytes())?;
+                }
+            }
         }
-    ];
-
-    for feed in &feeds {
-        let feed_file_path = args.output_path.join(feed.id.clone() + ".xml");
-        let mut feed_file = File::create(feed_file_path)?;
-        feed_file.write_all(feed.to_xml_string().as_bytes())?;
     }
 
     Ok(())
