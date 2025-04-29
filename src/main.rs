@@ -291,8 +291,23 @@ fn main() -> Result<()> {
                     let mut feed_file = File::create(output_file)?;
                     feed_file.write_all(feed.to_xml_string().as_bytes())?;
                 },
-                GenCommands::HfPapers { output_file: _ } => {
-                    return Err(anyhow!("HF Papers feed generator is not ready yet!"));
+                GenCommands::HfPapers { output_file } => {
+                    let papers = hf::read_weekly_papers(hf::get_current_week())?;
+
+                    feed = NewsFeed {
+                        id: "hf-papers".to_string(),
+                        title: "Huggingface papers".to_string(),
+                        items: papers.iter().map(|p| p.to_newsitem()).take(5).collect(),
+                        authors: vec![author.clone()],
+                        categories: Vec::new(),
+                        generator: "journalist".to_string(),
+                        link: "/hf-papers".to_string(),
+                        updated: Utc::now(),
+                        subtitle: "Papers from Huggingface Daily Papers.".to_string(),
+                    };
+
+                    let mut feed_file = File::create(output_file)?;
+                    feed_file.write_all(feed.to_xml_string().as_bytes())?;
                 },
                 GenCommands::RecommendedLinks { roam_db_path, notes_dir_path, output_file } => {
                     if let Some(db_path) = roam_db_path {
