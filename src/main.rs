@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use clap::{Parser, Subcommand};
 use log::debug;
-use std::{fs::File, io::Write, ops::Add, path};
+use std::{cmp::Reverse, fs::File, io::Write, ops::{Add, Deref}, path};
 use anyhow::{anyhow, Result};
 use sources::{hf, pile};
 use rand::seq::SliceRandom;
@@ -335,10 +335,13 @@ fn main() -> Result<()> {
                         panic!("Need either --notes-dir-path or --roam-db-path to be set!");
                     }
 
-                    let recommended_bookmarks: Vec<_> = bookmarks
+                    let mut recommended_bookmarks: Vec<_> = bookmarks
                         .iter()
                         .filter(|bm| bm.is_recommended())
                         .collect();
+
+                    recommended_bookmarks.sort_by_key(|bm| Reverse(bm.created));
+
                     feed = NewsFeed {
                         id: "recommended-links".to_string(),
                         title: "lepisma's recommended links".to_string(),
