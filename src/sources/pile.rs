@@ -1,4 +1,3 @@
-use std::env::consts;
 use std::fs;
 use std::{path, fs::File};
 use std::io::{self, BufRead};
@@ -12,10 +11,91 @@ static REF_REGEX: Lazy<Regex> = Lazy::new(|| { Regex::new(r"(?i)^:ROAM_REFS:\s*(
 static TAGS_REGEX: Lazy<Regex> = Lazy::new(|| { Regex::new(r"(?i)^\#\+TAGS:\s*(.*)").unwrap() });
 static TITLE_REGEX: Lazy<Regex> = Lazy::new(|| { Regex::new(r"(?i)^\#\+TITLE:\s*(.*)").unwrap() });
 
+// An org node from my notes directory. This could be a bookmark (a literature
+// note) or a general note.
+#[derive(Debug, Clone)]
+pub struct OrgNode {
+    id: String,
+    ref_: Option<String>,
+    title: String,
+    tags: Vec<String>,
+    created: DateTime<Utc>,
+    content: Option<String>,
+}
+
+impl OrgNode {
+    fn from_file(file_path: &path::Path) -> Result<Self> {
+        let mut id: Option<String> = None;
+        let mut ref_: Option<String> = None;
+        let mut tags: Vec<String> = Vec::new();
+        let mut title: Option<String> = None;
+
+        let body = fs::read_to_string(file_path)?;
+        let mut header_done = false;
+        let mut content = String::new();
+
+        for line in body.lines() {
+            if let Some(captures) = ID_REGEX.captures(&line) {
+                if let Some(id_str) = captures.get(1) {
+                    id = Some(id_str.as_str().to_string());
+                } else {
+                    return Err(anyhow!("Pattern for id matched but not able to parse value"));
+                }
+            } else if let Some(captures) = REF_REGEX.captures(&line) {
+                if let Some(ref_str) = captures.get(1) {
+                    ref_ = Some(ref_str.as_str().to_string());
+                } else {
+                    return Err(anyhow!("Pattern for ref matched but not able to parse value"));
+                }
+            } else if let Some(captures) = TAGS_REGEX.captures(&line) {
+                if let Some(tags_str) = captures.get(1) {
+                    tags = tags_str.as_str()
+                        .split(",")
+                        .map(|tag| tag.trim().to_string())
+                        .collect();
+                } else {
+                    return Err(anyhow!("Pattern for tags matched but not able to parse value"));
+                }
+            } else if let Some(captures) = TITLE_REGEX.captures(&line) {
+                if let Some(title_str) = captures.get(1) {
+                    title = Some(title_str.as_str().to_string());
+                    // In the way I have been keeping my notes, title is the
+                    // last line of the metadata block.
+                    header_done = true;
+                } else {
+                    return Err(anyhow!("Pattern for title matched but not able to parse value"));
+                }
+            }
+
+            if header_done {
+                content.push_str(line);
+                content.push_str("\n");
+            }
+        }
+
+        let trimmed_content = content.trim();
+
+        // Title and id are mandatory, if they are not present, return an
+        // Err. Else return whatever is parsed.
+        if title.is_some() && id.is_some() {
+            return Ok(OrgNode {
+                id: id.context("Unable to parse ID")?,
+                ref_,
+                title: title.context("Unable to parse title")?,
+                tags,
+                created: read_datetime(file_path)?,
+                content: if trimmed_content.is_empty() { None } else { Some(trimmed_content.to_string()) }
+            });
+        } else {
+            return Err(anyhow!("Parsing error"));
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Bookmark {
     pub id: String,
-    pub link: String,
+    pub ref_: String,
     pub title: String,
     pub tags: Vec<String>,
     pub created: DateTime<Utc>,
@@ -23,6 +103,21 @@ pub struct Bookmark {
 }
 
 impl Bookmark {
+    fn from_org_node(node: &OrgNode) -> Result<Self> {
+        if node.ref_.is_some() {
+            Ok(Bookmark {
+                id: node.id.clone(),
+                ref_: node.ref_.clone().unwrap(),
+                title: node.title.clone(),
+                tags: node.tags.clone(),
+                created: node.created,
+                content: node.content.clone(),
+            })
+        } else {
+            Err(anyhow!("Reference not found in node."))
+        }
+    }
+
     pub fn is_unread(&self) -> bool {
         self.tags.contains(&"unsorted".to_string())
     }
@@ -31,7 +126,7 @@ impl Bookmark {
         if self.tags.contains(&"project".to_string()) {
             true
         } else {
-            self.link.starts_with("https://github.com")
+            self.ref_.starts_with("https://github.com")
         }
     }
 
@@ -40,58 +135,9 @@ impl Bookmark {
     }
 }
 
-// Return id, ref, tags, and title (in that order) by reading the content of
-// given file. This doesn't parse anything after TITLE to keep the runtime
-// fast. For parsing the content too use proper parsing function.
-fn read_metadata(file_path: &path::Path) -> Result<(String, Option<String>, Vec<String>, String)> {
-    let mut id: Option<String> = None;
-    let mut ref_: Option<String> = None;
-    let mut tags: Vec<String> = Vec::new();
-    let mut title: Option<String> = None;
-
-    let content = fs::read_to_string(file_path)?;
-
-    for line in content.lines() {
-        if let Some(captures) = ID_REGEX.captures(&line) {
-            if let Some(id_str) = captures.get(1) {
-                id = Some(id_str.as_str().to_string());
-            } else {
-                return Err(anyhow!("Pattern for id matched but not able to parse value"));
-            }
-        } else if let Some(captures) = REF_REGEX.captures(&line) {
-            if let Some(ref_str) = captures.get(1) {
-                ref_ = Some(ref_str.as_str().to_string());
-            } else {
-                return Err(anyhow!("Pattern for ref matched but not able to parse value"));
-            }
-        } else if let Some(captures) = TAGS_REGEX.captures(&line) {
-            if let Some(tags_str) = captures.get(1) {
-                tags = tags_str.as_str()
-                    .split(",")
-                    .map(|tag| tag.trim().to_string())
-                    .collect();
-            } else {
-                return Err(anyhow!("Pattern for tags matched but not able to parse value"));
-            }
-        } else if let Some(captures) = TITLE_REGEX.captures(&line) {
-            if let Some(title_str) = captures.get(1) {
-                title = Some(title_str.as_str().to_string());
-                // In the way I have been keeping my notes, title is the
-                // last line of the metadata block.
-                break;
-            } else {
-                return Err(anyhow!("Pattern for title matched but not able to parse value"));
-            }
-        }
-    }
-
-    // Title and id are mandatory, if they are not present, return an
-    // Err. Else return whatever is parsed.
-    if title.is_some() && id.is_some() {
-        return Ok((id.unwrap(), ref_, tags, title.unwrap()));
-    } else {
-        return Err(anyhow!("Parsing error"));
-    }
+fn read_bookmark_from_file(file_path: &path::Path) -> Result<Bookmark> {
+    let org_node = OrgNode::from_file(file_path)?;
+    Bookmark::from_org_node(&org_node)
 }
 
 // Read #+TAGS: from the file and return a list
@@ -170,14 +216,8 @@ pub fn read_bookmarks_from_dir(dir_path: &path::Path) -> Vec<Bookmark> {
         let path = res.unwrap().path();
         if let Some(ext) = path.extension() {
             if ext == "org" {
-                if let Ok((id, ref_, tags, title)) = read_metadata(path.as_path()) {
-                    if let Some(link) = ref_ {
-                        output.push(Bookmark {
-                            id, link, title, tags,
-                            created: read_datetime(path.as_path()).unwrap_or(chrono::Utc::now()),
-                            content: read_content(path.as_path()).map_or(None, |v| Some(v)),
-                        })
-                    }
+                if let Ok(bookmark) = read_bookmark_from_file(path.as_path()) {
+                    output.push(bookmark);
                 }
             }
         }
@@ -207,7 +247,7 @@ pub fn read_bookmarks(roam_db_path: &path::Path) -> Vec<Bookmark> {
 
         output.push(Bookmark {
             id: statement.read::<String, _>("id").unwrap(),
-            link: statement.read::<String, _>("ref").unwrap(),
+            ref_: statement.read::<String, _>("ref").unwrap(),
             title: statement.read::<String, _>("title").unwrap(),
             tags: read_tags(file_path),
             created: read_datetime(file_path).unwrap_or(chrono::Utc::now()),

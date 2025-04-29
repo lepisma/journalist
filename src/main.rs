@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use clap::{Parser, Subcommand};
 use log::debug;
-use std::{cmp::Reverse, fs::File, io::Write, ops::{Add, Deref}, path};
+use std::{cmp::Reverse, fs::File, io::Write, ops::Add, path};
 use anyhow::{anyhow, Result};
 use sources::{hf, pile};
 use rand::seq::SliceRandom;
@@ -131,7 +131,7 @@ impl ToNewsItem for pile::Bookmark {
     fn to_newsitem(&self) -> NewsItem {
         NewsItem {
             id: self.id.clone(),
-            link: self.link.clone(),
+            link: self.ref_.clone(),
             title: self.title.clone(),
             summary: self.content.clone(),
             // NOTE: This is semantically wrong since created (when bookmark was
