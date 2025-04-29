@@ -62,6 +62,7 @@ impl OrgNode {
                     // In the way I have been keeping my notes, title is the
                     // last line of the metadata block.
                     header_done = true;
+                    continue;
                 } else {
                     return Err(anyhow!("Pattern for title matched but not able to parse value"));
                 }
