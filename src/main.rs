@@ -127,38 +127,6 @@ trait ToXmlString {
     fn to_xml_string(&self) -> String;
 }
 
-impl ToNewsItem for pile::Bookmark {
-    fn to_newsitem(&self) -> NewsItem {
-        NewsItem {
-            id: self.id.clone(),
-            link: self.ref_.clone(),
-            title: self.title.clone(),
-            summary: self.content.clone(),
-            // NOTE: This is semantically wrong since created (when bookmark was
-            //       saved) != published (when content was actually published).
-            published: self.created,
-            updated: self.created,
-            authors: Vec::new(),
-            categories: self.tags.clone(),
-        }
-    }
-}
-
-impl ToNewsItem for hf::Paper {
-    fn to_newsitem(&self) -> NewsItem {
-        NewsItem {
-            id: self.id.clone(),
-            link: self.link.clone(),
-            title: self.title.clone(),
-            summary: Some(self.description.clone()),
-            published: self.added,
-            updated: self.added,
-            authors: Vec::new(),
-            categories: self.tags.clone(),
-        }
-    }
-}
-
 impl ToXmlString for NewsAuthor {
     fn to_xml_string(&self) -> String {
         format!(r#"<author>
@@ -335,17 +303,18 @@ fn main() -> Result<()> {
                         panic!("Need either --notes-dir-path or --roam-db-path to be set!");
                     }
 
-                    let mut recommended_bookmarks: Vec<_> = bookmarks
+                    let mut recommended_items: Vec<_> = bookmarks
                         .iter()
                         .filter(|bm| bm.is_recommended())
+                        .map(|bm| bm.to_newsitem())
                         .collect();
 
-                    recommended_bookmarks.sort_by_key(|bm| Reverse(bm.created));
+                    recommended_items.sort_by_key(|it| Reverse(it.updated));
 
                     feed = NewsFeed {
                         id: "recommended-links".to_string(),
                         title: "lepisma's recommended links".to_string(),
-                        items: recommended_bookmarks.iter().map(|bm| bm.to_newsitem()).collect(),
+                        items: recommended_items,
                         authors: vec![author.clone()],
                         categories: Vec::new(),
                         generator: "journalist".to_string(),

@@ -6,6 +6,8 @@ use anyhow::{Result, anyhow, Context};
 use once_cell::sync::Lazy;
 use chrono::{DateTime, Utc};
 
+use crate::{ToNewsItem, NewsItem};
+
 static ID_REGEX: Lazy<Regex> = Lazy::new(|| { Regex::new(r"(?i)^:id:\s*(.*)").unwrap() });
 static REF_REGEX: Lazy<Regex> = Lazy::new(|| { Regex::new(r"(?i)^:ROAM_REFS:\s*(.*)").unwrap() });
 static TAGS_REGEX: Lazy<Regex> = Lazy::new(|| { Regex::new(r"(?i)^\#\+TAGS:\s*(.*)").unwrap() });
@@ -95,12 +97,12 @@ impl OrgNode {
 
 #[derive(Debug, Clone)]
 pub struct Bookmark {
-    pub id: String,
-    pub ref_: String,
-    pub title: String,
-    pub tags: Vec<String>,
-    pub created: DateTime<Utc>,
-    pub content: Option<String>,
+    id: String,
+    ref_: String,
+    title: String,
+    tags: Vec<String>,
+    created: DateTime<Utc>,
+    content: Option<String>,
 }
 
 impl Bookmark {
@@ -133,6 +135,23 @@ impl Bookmark {
 
     pub fn is_recommended(&self) -> bool {
         self.tags.contains(&"recommend".to_string()) & !self.is_unread()
+    }
+}
+
+impl ToNewsItem for Bookmark {
+    fn to_newsitem(&self) -> NewsItem {
+        NewsItem {
+            id: self.id.clone(),
+            link: self.ref_.clone(),
+            title: self.title.clone(),
+            summary: self.content.clone(),
+            // NOTE: This is semantically wrong since created (when bookmark was
+            //       saved) != published (when content was actually published).
+            published: self.created,
+            updated: self.created,
+            authors: Vec::new(),
+            categories: self.tags.clone(),
+        }
     }
 }
 
