@@ -115,8 +115,28 @@ fn read_tags(file_path: &path::Path) -> Vec<String> {
 }
 
 fn read_content(file_path: &path::Path) -> Result<String> {
-    // Reading and returning the whole file data as of now
-    Ok(std::fs::read_to_string(file_path)?)
+    let file = File::open(file_path)?;
+    let reader = io::BufReader::new(file);
+    let mut content = String::new();
+
+    let mut in_content = false;
+    for line in reader.lines() {
+        let line = line?;
+        let trimmed_line = line.trim();
+
+        if !in_content {
+            if trimmed_line.starts_with("#") || trimmed_line.starts_with(":") || trimmed_line.is_empty() {
+                continue;
+            } else {
+                in_content = true;
+            }
+        }
+
+        content.push_str(&line);
+        content.push_str("\n");
+    }
+
+    Ok(content)
 }
 
 // Read datetime of creation of the file using the pattern in file name
